@@ -1,11 +1,11 @@
 {
   "name": "tyc-ai-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Tiny backend for Trace Your Case: upload judgement -> summarise -> chat",
   "main": "api/upload.js",
   "scripts": {
     "start": "vercel dev"
-    "type": "module",
   },
   "dependencies": {
     "formidable": "^2.1.1",

@@ -1,0 +1,20 @@
+{
+  "name": "tyc-ai-backend",
+  "version": "1.0.0",
+  "description": "Tiny backend for Trace Your Case: upload judgement -> summarise -> chat",
+  "main": "api/upload.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "formidable": "^2.1.1",
+    "mammoth": "^1.4.21",
+    "pdf-parse": "^1.1.1",
+    "node-fetch": "^2.6.7",
+    "uuid": "^9.0.0"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "license": "MIT"
+}

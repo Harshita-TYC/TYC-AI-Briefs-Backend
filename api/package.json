@@ -5,6 +5,7 @@
   "main": "api/upload.js",
   "scripts": {
     "start": "vercel dev"
+    "type": "module",
   },
   "dependencies": {
     "formidable": "^2.1.1",

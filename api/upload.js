@@ -1,65 +1,55 @@
 // api/upload.js
-import { createClient } from '@supabase/supabase-js';
-import formidable from 'formidable';
-import fs from 'fs';
-import { randomUUID } from 'crypto';
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const ALLOWED_ORIGIN = process.env.SITE_ORIGIN || '*';
-
-export const config = { api: { bodyParser: false } };
+import formidable from "formidable";
 
 export default async function handler(req, res) {
-  // CORS + preflight
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // Basic CORS (adjust allowed origin for production)
+  res.setHeader("Access-Control-Allow-Origin", "https://traceyourcase.com");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  const form = new formidable.IncomingForm();
-  form.maxFileSize = 50 * 1024 * 1024; // 50 MB
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
-  form.parse(req, async (err, fields, files) => {
-    try {
-      if (err) {
-        console.error('Form parse error', err);
-        return res.status(400).json({ error: 'Invalid upload' });
-      }
-      const file = files.file;
-      if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    console.log("upload handler: start");
 
-      const jobId = 'job-' + randomUUID();
-      const filename = file.originalFilename || file.newFilename || `upload-${Date.now()}`;
-      const key = `${jobId}/${filename}`;
+    // Use formidable v2+ recommended API (factory call)
+    const form = formidable({
+      multiples: false,
+      keepExtensions: true,
+      // maxFileSize: 20 * 1024 * 1024, // optional: 20 MB
+    });
 
-      const buffer = fs.readFileSync(file.filepath);
+    const parsed = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve({ fields, files });
+      });
+    });
 
-      const { error: upErr } = await supabase.storage
-        .from('uploads')
-        .upload(key, buffer, { contentType: file.mimetype, upsert: false });
+    console.log("upload handler - parsed keys:", Object.keys(parsed.files || {}), Object.keys(parsed.fields || {}));
 
-      if (upErr) {
-        console.error('Supabase upload error', upErr);
-        return res.status(500).json({ error: 'Storage upload failed' });
-      }
+    // For now return the file names/sizes (replace with real processing)
+    const files = parsed.files || {};
+    const fileInfo = Object.entries(files).map(([k, v]) => {
+      return {
+        fieldName: k,
+        filename: v.originalFilename ?? v.newFilename ?? v.fileName ?? "unknown",
+        mime: v.mimetype ?? v.mimetype ?? v.type ?? "unknown",
+        size: v.size ?? "unknown",
+        path: v.filepath ?? v.filePath ?? v.path ?? null,
+      };
+    });
 
-      const { error: insErr } = await supabase.from('jobs').insert([
-        { id: jobId, filename, path: key, status: 'pending', created_at: new Date().toISOString() }
-      ]);
+    // TEMP: a stub brief - replace with your AI brief generation
+    const brief = "This is a stub brief returned immediately for testing. Replace with real logic later.";
 
-      if (insErr) {
-        console.error('Insert job error', insErr);
-        return res.status(500).json({ error: 'Job create failed' });
-      }
-
-      return res.status(200).json({ jobId });
-    } catch (e) {
-      console.error('Upload handler error', e);
-      return res.status(500).json({ error: 'Server error' });
-    }
-  });
+    return res.status(200).json({ ok: true, files: fileInfo, brief });
+  } catch (err) {
+    console.error("upload handler error:", err && (err.stack || err.message || err));
+    return res.status(500).json({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
 }

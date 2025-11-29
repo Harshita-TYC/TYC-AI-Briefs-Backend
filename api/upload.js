@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const fileBuffer = await fs.promises.readFile(filepath);
 
     // Upload to Supabase Storage (example: bucket 'judgements' — create bucket in Supabase console)
-    const bucket = "judgements";
+    const bucket = "judgement uploads";
     const key = `uploads/${Date.now()}-${originalName}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage

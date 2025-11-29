@@ -1,36 +1,33 @@
 // api/upload.js
-// ESM module (package.json type: "module")
-import { createClient } from "@supabase/supabase-js";
-import formidable from "formidable";
-import fs from "fs";
+import { createClient } from '@supabase/supabase-js';
+import formidable from 'formidable';
+import fs from 'fs';
 
-const allowedOrigin = "https://traceyourcase.com"; // change if needed
+// Disable Next/Vercel body parser for file uploads
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-// Initialize supabase client once (read envs)
+// --- ENVIRONMENT VARIABLES ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error("Missing Supabase envs: SUPABASE_URL or SUPABASE_SERVICE_KEY");
-}
+// Your actual bucket name — FIXED
+const BUCKET_NAME = "Judgement Uploads";
 
-// Create supabase client
-const supabase = createClient(SUPABASE_URL || "", SUPABASE_SERVICE_KEY || "", {
-  auth: { autoRefreshToken: false },
-});
+// Init supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-function sendCORSHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
+// --- MAIN HANDLER ---
 export default async function handler(req, res) {
-  // Handle preflight
-  sendCORSHeaders(res);
+  // CORS preflight
   if (req.method === "OPTIONS") {
-    return res.status(204).end();
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return res.status(200).end();
   }
 
   if (req.method !== "POST") {
@@ -38,9 +35,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // formidable usage: create parser instance (ESM-friendly)
-    // This returns {files, fields} on parse
-    const form = formidable({ keepExtensions: true, maxFileSize: 30 * 1024 * 1024 }); // 30MB safe ceiling
+    // --- Parse incoming file ---
+    const form = new formidable.IncomingForm();
+
     const parsed = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) return reject(err);
@@ -48,52 +45,54 @@ export default async function handler(req, res) {
       });
     });
 
-    const { files } = parsed;
-    if (!files || !files.file) {
-      return res.status(400).json({ error: "No file uploaded (field name must be 'file')" });
+    const file = parsed.files?.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
-    // In formidable v2, file might be object or array
-    const uploadedFile = Array.isArray(files.file) ? files.file[0] : files.file;
-    const filepath = uploadedFile.filepath || uploadedFile.path || uploadedFile.path; // different shapes
-    const originalName = uploadedFile.originalFilename || uploadedFile.name || "upload.pdf";
+    const fileBuffer = fs.readFileSync(file.filepath);
 
-    // Read file buffer
-    const fileBuffer = await fs.promises.readFile(filepath);
+    // Create a unique destination filename
+    const destPath = `uploads/${Date.now()}_${file.originalFilename}`;
 
-    // Upload to Supabase Storage (example: bucket 'judgements' — create bucket in Supabase console)
-    const bucket = "judgement uploads";
-    const key = `uploads/${Date.now()}-${originalName}`;
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(key, fileBuffer, {
-        contentType: uploadedFile.mimetype || "application/pdf",
+    // --- Upload to Supabase ---
+    const { data, error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(destPath, fileBuffer, {
+        contentType: file.mimetype || "application/octet-stream",
         upsert: false,
       });
 
     if (uploadError) {
       console.error("Supabase upload error:", uploadError);
-      return res.status(500).json({ error: "Storage upload failed", details: uploadError.message });
+      return res.status(500).json({
+        error: "Upload to Supabase failed",
+        details: uploadError.message,
+      });
     }
 
-    // Generate public URL or signed URL (publicURL requires bucket to be public)
-    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(key);
+    // --- Get public URL (if bucket is public) ---
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(destPath);
 
-    // For MVP return a stub brief (replace with AI processing flow)
-    const brief = "This is a stub brief returned immediately for testing. Replace with real logic later.";
+    const publicUrl = urlData?.publicUrl || null;
 
+    // --- Final Response ---
     return res.status(200).json({
       ok: true,
-      briefId: key,
-      brief,
-      storage: {
-        key,
-        publicUrl: publicUrlData?.publicUrl || null,
-      },
+      message: "File uploaded successfully",
+      storageKey: destPath,
+      publicUrl,
+      brief: "This is a stub brief returned immediately for testing. Replace with real logic later."
     });
+
   } catch (err) {
-    console.error("upload handler error:", err);
-    return res.status(500).json({ error: "Server error", message: String(err?.message || err) });
+    console.error("Upload handler error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message || "Unknown server error",
+    });
   }
 }

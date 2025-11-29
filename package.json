@@ -1,14 +1,15 @@
 {
-  "name": "tyc-ai-briefs-backend",
+  "name": "tyc-ai-backend",
   "version": "1.0.0",
-  "main": "api/upload.js",
   "type": "module",
   "scripts": {
+    "dev": "vercel dev",
     "start": "vercel dev"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.42.0",
-    "formidable": "^3.5.1",
-    "openai": "^4.54.0"
+    "@supabase/supabase-js": "^2.18.0",
+    "formidable": "^2.1.1",
+    "mammoth": "^1.4.21",
+    "pdf-parse": "^1.1.1"
   }
 }
